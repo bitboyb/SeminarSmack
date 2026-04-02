@@ -1,0 +1,33 @@
+{
+  "title": "Seminar Kickoff",
+  "description": "A starter session with a poll, a short text prompt, and a quiz.",
+  "activities": [
+    {
+      "id": "poll-energy",
+      "type": "poll",
+      "question": "How are you feeling at the start of today?",
+      "options": [
+        "Ready to go",
+        "Cautiously optimistic",
+        "I need more coffee"
+      ]
+    },
+    {
+      "id": "text-question",
+      "type": "text",
+      "question": "In one sentence, what do you want to leave with today?",
+      "maxLength": 180
+    },
+    {
+      "id": "quiz-recall",
+      "type": "quiz",
+      "question": "Which statement best describes SeminarSmack v1?",
+      "options": [
+        "It needs a dedicated backend server",
+        "It stores session content in JSON files",
+        "It requires participants to sign in"
+      ],
+      "correctIndex": 1
+    }
+  ]
+}

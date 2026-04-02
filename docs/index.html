@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>SeminarSmack</title>
+    <meta
+      name="description"
+      content="SeminarSmack is a static, browser-only audience interaction companion for live teaching, talks, and workshops."
+    />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=IBM+Plex+Mono:wght@400;500&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="./styles.css" />
+    <script>
+      window.APP_CONFIG = window.APP_CONFIG || {};
+    </script>
+    <script src="./config.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script type="module" src="./app.js"></script>
+  </head>
+  <body data-page="index">
+    <main class="shell shell-wide">
+      <section class="hero panel panel-spacious">
+        <p class="eyebrow">Markdown for live interactive teaching</p>
+        <h1>SeminarSmack</h1>
+        <p class="hero-copy">
+          A minimal browser companion for live polling, short text prompts,
+          quizzes, and embeddable Marp results. Deploy once, define sessions as
+          JSON, and run everything from GitHub Pages with Supabase Realtime.
+        </p>
+        <div class="hero-actions">
+          <a
+            class="button button-primary"
+            href="./present.html?room=loop-f9k2m&session=sample-session&host=demo-host"
+            >Preview presenter page</a
+          >
+          <a
+            class="button button-secondary"
+            href="./join.html?room=loop-f9k2m&session=sample-session"
+            >Preview participant page</a
+          >
+          <a
+            class="button button-ghost"
+            href="./embed.html?room=loop-f9k2m&session=sample-session"
+            >Preview embed page</a
+          >
+        </div>
+      </section>
+
+      <section class="card-grid three-up">
+        <article class="panel">
+          <p class="section-kicker">Presenter</p>
+          <h2>Drive the room</h2>
+          <p>
+            Load a JSON session, step between activities, reset responses, lock
+            submissions, reveal quiz answers, and share join or embed links.
+          </p>
+        </article>
+        <article class="panel">
+          <p class="section-kicker">Participant</p>
+          <h2>Join from any browser</h2>
+          <p>
+            Audience members open a simple URL, answer the current prompt, and
+            stay in sync with the presenter without any account or install.
+          </p>
+        </article>
+        <article class="panel">
+          <p class="section-kicker">Embed</p>
+          <h2>Drop into Marp</h2>
+          <p>
+            Use the read-only embed URL in an iframe to show live results inside
+            slides, speaker notes, or a projector view.
+          </p>
+        </article>
+      </section>
+
+      <section class="panel panel-spacious">
+        <div class="section-heading">
+          <div>
+            <p class="section-kicker">Quick Start</p>
+            <h2>Build launch links</h2>
+          </div>
+          <div id="config-status" class="config-pill" aria-live="polite"></div>
+        </div>
+
+        <form id="link-builder" class="stack-lg">
+          <div class="field-grid">
+            <label class="field">
+              <span>Room code</span>
+              <input
+                id="builder-room"
+                name="room"
+                type="text"
+                placeholder="loop-f9k2m"
+                autocomplete="off"
+              />
+            </label>
+            <label class="field">
+              <span>Session file</span>
+              <input
+                id="builder-session"
+                name="session"
+                type="text"
+                placeholder="sample-session"
+                autocomplete="off"
+              />
+            </label>
+            <label class="field">
+              <span>Host token</span>
+              <input
+                id="builder-host"
+                name="host"
+                type="text"
+                placeholder="secret-host-token"
+                autocomplete="off"
+              />
+            </label>
+          </div>
+
+          <div class="hero-actions">
+            <button id="builder-randomize" class="button button-secondary" type="button">
+              Generate new room + token
+            </button>
+          </div>
+
+          <div class="output-grid">
+            <label class="field">
+              <span>Presenter URL</span>
+              <div class="copy-row">
+                <input id="presenter-link" type="text" readonly />
+                <button class="button button-ghost" type="button" data-copy-target="presenter-link">
+                  Copy
+                </button>
+              </div>
+            </label>
+            <label class="field">
+              <span>Participant URL</span>
+              <div class="copy-row">
+                <input id="join-link" type="text" readonly />
+                <button class="button button-ghost" type="button" data-copy-target="join-link">
+                  Copy
+                </button>
+              </div>
+            </label>
+            <label class="field">
+              <span>Embed URL</span>
+              <div class="copy-row">
+                <input id="embed-link" type="text" readonly />
+                <button class="button button-ghost" type="button" data-copy-target="embed-link">
+                  Copy
+                </button>
+              </div>
+            </label>
+            <label class="field">
+              <span>Verified embed URL</span>
+              <div class="copy-row">
+                <input id="secure-embed-link" type="text" readonly />
+                <button
+                  class="button button-ghost"
+                  type="button"
+                  data-copy-target="secure-embed-link"
+                >
+                  Copy
+                </button>
+              </div>
+            </label>
+          </div>
+        </form>
+      </section>
+
+      <section class="card-grid two-up">
+        <article class="panel">
+          <p class="section-kicker">Session files</p>
+          <h2>Author content as JSON</h2>
+          <p>
+            Put session files in <code>/docs/sessions/</code> and load them with
+            <code>?session=filename</code>. The app stays static while the
+            content remains easy to version, fork, and reuse.
+          </p>
+        </article>
+        <article class="panel">
+          <p class="section-kicker">Deployment</p>
+          <h2>Ship via GitHub Pages</h2>
+          <p>
+            The included GitHub Actions workflow injects Supabase config into
+            <code>docs/config.js</code> during deployment so forks can bring
+            their own project URL and publishable key.
+          </p>
+        </article>
+      </section>
+    </main>
+  </body>
+</html>

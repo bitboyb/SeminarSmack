@@ -1,0 +1,33 @@
+{
+  "title": "Workshop Check-in",
+  "description": "Another example session for demos, rehearsals, or onboarding.",
+  "activities": [
+    {
+      "id": "poll-pacing",
+      "type": "poll",
+      "question": "How is the pacing so far?",
+      "options": [
+        "Too fast",
+        "Just right",
+        "Too slow"
+      ]
+    },
+    {
+      "id": "text-challenge",
+      "type": "text",
+      "question": "What is the biggest obstacle in your current workflow?",
+      "maxLength": 140
+    },
+    {
+      "id": "quiz-stack",
+      "type": "quiz",
+      "question": "Which technology is required for this project?",
+      "options": [
+        "Vanilla JavaScript",
+        "React",
+        "A Node backend"
+      ],
+      "correctIndex": 0
+    }
+  ]
+}

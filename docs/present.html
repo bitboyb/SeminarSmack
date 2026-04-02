@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>SeminarSmack Presenter</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=IBM+Plex+Mono:wght@400;500&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="./styles.css" />
+    <script>
+      window.APP_CONFIG = window.APP_CONFIG || {};
+    </script>
+    <script src="./config.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script type="module" src="./app.js"></script>
+  </head>
+  <body data-page="present">
+    <main class="shell shell-wide">
+      <header class="subhero panel">
+        <div>
+          <p class="section-kicker">Presenter console</p>
+          <h1>Run the room</h1>
+        </div>
+        <a class="button button-ghost" href="./index.html">Setup guide</a>
+      </header>
+
+      <div id="page-status" class="status-banner" aria-live="polite"></div>
+
+      <div class="dashboard-grid">
+        <section id="session-summary" class="panel panel-spacious"></section>
+        <section id="control-panel" class="panel panel-spacious"></section>
+        <section id="activity-stage" class="panel panel-spacious"></section>
+        <section id="results-stage" class="panel panel-spacious"></section>
+        <section id="authoring-panel" class="panel panel-spacious"></section>
+      </div>
+    </main>
+  </body>
+</html>
