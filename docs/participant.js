@@ -35,7 +35,8 @@ export async function initJoinPage() {
     sessionSource: sessionParam ? `${sessionParam}.json` : "not loaded",
     sharedState: null, connectionLabel: "Not connected", connectionTone: "muted",
     textDraft: "", bannerMessage: "", bannerTone: "info",
-    submissionStoreKey: buildSubmissionStoreKey(room, sessionParam || "default")
+    submissionStoreKey: buildSubmissionStoreKey(room, sessionParam || "default"),
+    lastHeartbeat: Date.now(), watchdogTimer: null
   };
 
   if (!room) {
@@ -79,6 +80,7 @@ export async function initJoinPage() {
       activity_changed: async (p) => {
         const ok = await verifyEventIfNeeded(runtime, "activity_changed", p);
         if (!ok || !runtime.session || !runtime.sharedState) return;
+        runtime.lastHeartbeat = Date.now();
         const rev = Number(p.revision) || 0;
         if (rev < runtime.sharedState.revision) return;
         runtime.sharedState.currentActivityIndex = clampIndex(Number(p.currentActivityIndex), runtime.session.activities.length);
@@ -89,6 +91,7 @@ export async function initJoinPage() {
       session_reset: async (p) => {
         const ok = await verifyEventIfNeeded(runtime, "session_reset", p);
         if (!ok || !runtime.session || !runtime.sharedState) return;
+        runtime.lastHeartbeat = Date.now();
         const rev = Number(p.revision) || 0;
         if (rev < runtime.sharedState.revision) return;
         const activity = getActivityById(runtime.session, p.activityId);
@@ -104,6 +107,7 @@ export async function initJoinPage() {
       submissions_locked: async (p) => {
         const ok = await verifyEventIfNeeded(runtime, "submissions_locked", p);
         if (!ok || !runtime.sharedState) return;
+        runtime.lastHeartbeat = Date.now();
         const rev = Number(p.revision) || 0;
         if (rev < runtime.sharedState.revision) return;
         runtime.sharedState.submissionsLocked = Boolean(p.locked);
@@ -113,6 +117,7 @@ export async function initJoinPage() {
       reveal_answer: async (p) => {
         const ok = await verifyEventIfNeeded(runtime, "reveal_answer", p);
         if (!ok || !runtime.session || !runtime.sharedState) return;
+        runtime.lastHeartbeat = Date.now();
         const rev = Number(p.revision) || 0;
         if (rev < runtime.sharedState.revision) return;
         const aid = String(p.activityId || "");
@@ -140,6 +145,26 @@ export async function initJoinPage() {
       runtime.bannerMessage = "Connected. Waiting for presenter to start the session.";
       runtime.bannerTone = "info";
     }
+
+    runtime.lastHeartbeat = Date.now();
+    runtime.watchdogTimer = window.setInterval(() => {
+      if (!runtime.channel) return;
+      const elapsed = Date.now() - runtime.lastHeartbeat;
+      if (elapsed > 60000) {
+        void closeRoomChannel(runtime.channel);
+        runtime.channel = null;
+        runtime.bannerMessage = "The session has ended or the presenter has disconnected.";
+        runtime.bannerTone = "warning";
+        runtime.connectionLabel = "Offline";
+        runtime.connectionTone = "warning";
+        renderAudience(runtime);
+        window.clearInterval(runtime.watchdogTimer);
+      } else if (elapsed > 15000 && runtime.bannerMessage !== "Presenter appears to be offline. Waiting for them to reconnect...") {
+        runtime.bannerMessage = "Presenter appears to be offline. Waiting for them to reconnect...";
+        runtime.bannerTone = "warning";
+        renderAudience(runtime);
+      }
+    }, 5000);
   } catch {
     runtime.connectionLabel = "Connection failed";
     runtime.connectionTone = "warning";
@@ -148,7 +173,10 @@ export async function initJoinPage() {
   }
 
   renderAudience(runtime);
-  window.addEventListener("beforeunload", () => { if (runtime.channel) void closeRoomChannel(runtime.channel); });
+  window.addEventListener("beforeunload", () => {
+    if (runtime.watchdogTimer) window.clearInterval(runtime.watchdogTimer);
+    if (runtime.channel) void closeRoomChannel(runtime.channel);
+  });
 }
 
 // ── Snapshot application ───────────────────────────────────────
@@ -156,6 +184,9 @@ export async function initJoinPage() {
 function applySnapshot(runtime, payload) {
   const rev = Number(payload.revision) || 0;
   if (runtime.sharedState && rev < runtime.sharedState.revision) return false;
+  
+  runtime.lastHeartbeat = Date.now();
+  
   const v = validateSession(payload.session);
   if (!v.ok) return false;
 

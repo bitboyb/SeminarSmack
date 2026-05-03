@@ -157,6 +157,29 @@ function attachSession(runtime, session, sourceLabel) {
   runtime.sessionSource = sourceLabel;
   runtime.presenterState = createPresenterState(session);
   runtime.authoringDraft = JSON.stringify(session, null, 2);
+
+  try {
+    const stickyStr = window.localStorage.getItem(`seminarsmack:sticky:${runtime.room}`);
+    if (stickyStr) {
+      const sticky = JSON.parse(stickyStr);
+      if (sticky.sessionHash === runtime.sessionHash) {
+        runtime.presenterState.currentActivityIndex = clampIndex(Number(sticky.currentActivityIndex), session.activities.length);
+        runtime.presenterState.submissionsLocked = Boolean(sticky.submissionsLocked);
+        runtime.presenterState.revealedActivityIds = new Set(Array.isArray(sticky.revealedActivityIds) ? sticky.revealedActivityIds : []);
+      }
+    }
+  } catch {}
+}
+
+function saveStickyState(runtime) {
+  if (!runtime.room || !runtime.presenterState) return;
+  const sticky = {
+    sessionHash: runtime.sessionHash,
+    currentActivityIndex: runtime.presenterState.currentActivityIndex,
+    submissionsLocked: runtime.presenterState.submissionsLocked,
+    revealedActivityIds: [...runtime.presenterState.revealedActivityIds]
+  };
+  window.localStorage.setItem(`seminarsmack:sticky:${runtime.room}`, JSON.stringify(sticky));
 }
 
 function resetActivity(runtime, activity, opts = {}) {
@@ -166,6 +189,7 @@ function resetActivity(runtime, activity, opts = {}) {
   runtime.presenterState.activityStates[activity.id] = next;
   runtime.presenterState.revealedActivityIds.delete(activity.id);
   runtime.presenterState.revision = opts.nextRevision || runtime.presenterState.revision + 1;
+  saveStickyState(runtime);
   if (!opts.silent) { runtime.bannerMessage = "Activity reset."; runtime.bannerTone = "success"; }
 }
 
@@ -245,7 +269,7 @@ function renderPresenter(runtime) {
         <button id="prev-activity" class="button button-ghost" type="button" ${disabled || !activity || getActivityNumber(runtime.session, activity.id) === 1 ? 'disabled' : ''}>← Previous</button>
         <button id="next-activity" class="button button-primary" type="button" ${disabled || !activity || getActivityNumber(runtime.session, activity.id) === runtime.session?.activities.length ? 'disabled' : ''}>Next →</button>
         <button id="toggle-lock" class="button button-secondary" type="button" ${disabled || !activity ? 'disabled' : ''}>${runtime.presenterState?.submissionsLocked ? 'Open submissions' : 'Close submissions'}</button>
-        <button id="reset-activity" class="button button-danger" type="button" ${disabled || !activity ? 'disabled' : ''}>Reset</button>
+        <button id="reset-activity" class="button button-danger" type="button" ${disabled || !activity ? 'disabled' : ''}>Reset & Allow Resubmission</button>
         <button id="toggle-reveal" class="button button-ghost" type="button" ${disabled || !canReveal ? 'disabled' : ''}>${isRevealed ? 'Hide answer' : 'Reveal answer'}</button>
       </div>
 
@@ -426,6 +450,7 @@ async function shiftActivity(runtime, delta) {
   runtime.presenterState.currentActivityIndex = ni;
   runtime.presenterState.submissionsLocked = false;
   runtime.presenterState.revision += 1;
+  saveStickyState(runtime);
   await sendPresenterEvent(runtime, "activity_changed", {
     activityId: runtime.session.activities[ni].id,
     currentActivityIndex: ni, submissionsLocked: false,
@@ -439,6 +464,7 @@ async function toggleLock(runtime) {
   if (!runtime.presenterState || !runtime.hostToken) return;
   runtime.presenterState.submissionsLocked = !runtime.presenterState.submissionsLocked;
   runtime.presenterState.revision += 1;
+  saveStickyState(runtime);
   await sendPresenterEvent(runtime, "submissions_locked", { locked: runtime.presenterState.submissionsLocked, revision: runtime.presenterState.revision });
   scheduleSnapshot(runtime, "lock_toggled");
   renderPresenter(runtime);
@@ -462,6 +488,7 @@ async function toggleReveal(runtime) {
   if (revealed) runtime.presenterState.revealedActivityIds.add(activity.id);
   else runtime.presenterState.revealedActivityIds.delete(activity.id);
   runtime.presenterState.revision += 1;
+  saveStickyState(runtime);
   await sendPresenterEvent(runtime, "reveal_answer", { activityId: activity.id, revealed, revision: runtime.presenterState.revision });
   scheduleSnapshot(runtime, "reveal_toggled");
   renderPresenter(runtime);

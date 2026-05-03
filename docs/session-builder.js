@@ -30,10 +30,30 @@ let state = {
 };
 
 let nextActivityId = 1;
+let saveDraftTimer = null;
+
+function saveDraft() {
+  if (saveDraftTimer) window.clearTimeout(saveDraftTimer);
+  saveDraftTimer = window.setTimeout(() => {
+    window.localStorage.setItem("seminarsmack:draft-session", JSON.stringify(state));
+  }, 500);
+}
 
 export function initCreatePage() {
-  state.roomCode = generateRoomCode();
-  state.hostToken = randomToken(18);
+  const draftStr = window.localStorage.getItem("seminarsmack:draft-session");
+  if (draftStr) {
+    try {
+      const draft = JSON.parse(draftStr);
+      if (draft && typeof draft === "object" && draft.roomCode) {
+        state = draft;
+      }
+    } catch {}
+  }
+
+  if (!state.roomCode) {
+    state.roomCode = generateRoomCode();
+    state.hostToken = randomToken(18);
+  }
   render();
 }
 
@@ -182,9 +202,11 @@ function bindEvents() {
   // Title & description
   document.getElementById("builder-title")?.addEventListener("input", (e) => {
     state.title = e.target.value;
+    saveDraft();
   });
   document.getElementById("builder-desc")?.addEventListener("input", (e) => {
     state.description = e.target.value;
+    saveDraft();
   });
 
   // Add activity type
@@ -200,6 +222,7 @@ function bindEvents() {
     input.addEventListener("input", () => {
       const idx = Number(input.dataset.activityQuestion);
       state.activities[idx].question = input.value;
+      saveDraft();
     });
   });
 
@@ -209,6 +232,7 @@ function bindEvents() {
       const ai = Number(input.dataset.activity);
       const oi = Number(input.dataset.option);
       state.activities[ai].options[oi] = input.value;
+      saveDraft();
     });
   });
 
@@ -217,6 +241,7 @@ function bindEvents() {
     btn.addEventListener("click", () => {
       const idx = Number(btn.dataset.addOption);
       state.activities[idx].options.push("");
+      saveDraft();
       render();
     });
   });
@@ -235,6 +260,7 @@ function bindEvents() {
           state.activities[ai].correctIndex--;
         }
       }
+      saveDraft();
       render();
     });
   });
@@ -245,6 +271,7 @@ function bindEvents() {
       const ai = Number(btn.dataset.setCorrect);
       const ci = Number(btn.dataset.correctIndex);
       state.activities[ai].correctIndex = ci;
+      saveDraft();
       render();
     });
   });
@@ -254,7 +281,10 @@ function bindEvents() {
     btn.addEventListener("click", () => {
       const idx = Number(btn.dataset.moveUp);
       if (idx > 0) {
-        [state.activities[idx - 1], state.activities[idx]] = [state.activities[idx], state.activities[idx - 1]];
+        const temp = state.activities[idx];
+        state.activities[idx] = state.activities[idx - 1];
+        state.activities[idx - 1] = temp;
+        saveDraft();
         render();
       }
     });
@@ -264,7 +294,10 @@ function bindEvents() {
     btn.addEventListener("click", () => {
       const idx = Number(btn.dataset.moveDown);
       if (idx < state.activities.length - 1) {
-        [state.activities[idx], state.activities[idx + 1]] = [state.activities[idx + 1], state.activities[idx]];
+        const temp = state.activities[idx];
+        state.activities[idx] = state.activities[idx + 1];
+        state.activities[idx + 1] = temp;
+        saveDraft();
         render();
       }
     });
@@ -275,6 +308,7 @@ function bindEvents() {
     btn.addEventListener("click", () => {
       const idx = Number(btn.dataset.removeActivity);
       state.activities.splice(idx, 1);
+      saveDraft();
       render();
     });
   });
@@ -284,6 +318,7 @@ function bindEvents() {
     input.addEventListener("input", () => {
       const idx = Number(input.dataset.activityMaxlen);
       state.activities[idx].maxLength = Number(input.value) || 180;
+      saveDraft();
     });
   });
 
@@ -318,6 +353,7 @@ function bindEvents() {
         options: a.options ? [...a.options] : undefined
       }));
       setBanner(document.getElementById("page-status"), "Session imported successfully.", "success");
+      saveDraft();
       render();
     } catch {
       setBanner(document.getElementById("page-status"), "Could not read the JSON file.", "warning");
@@ -341,6 +377,7 @@ function addActivity(type) {
   }
 
   state.activities.push(activity);
+  saveDraft();
   render();
 }
 
@@ -378,6 +415,7 @@ function startSession() {
   }
 
   saveSessionToStorage(state.roomCode, validation.session);
+  window.localStorage.removeItem("seminarsmack:draft-session");
 
   const url = buildPageUrl("present", {
     room: state.roomCode,
