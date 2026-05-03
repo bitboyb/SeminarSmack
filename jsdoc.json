@@ -8,6 +8,6 @@
   "opts": {
     "destination": "./docs/api",
     "recurse": true,
-    "readme": "README.md"
+    "readme": "docs/API.md"
   }
 }

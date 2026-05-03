@@ -43,132 +43,10 @@
 
 
     <section>
-        <article><div align="center">
-  <img src="https://github.com/bitboyb/SeminarSmack/blob/main/docs/assets/img/logo.png?raw=true" alt="SeminarSmack Logo" width="120" style="border-radius: 20%; margin-bottom: 20px;" />
-  <h1>SeminarSmack</h1>
-  <p><strong>A free, open-source classroom interaction tool.</strong></p>
-  <a href="https://bitboyb.github.io/SeminarSmack/">
-    <img src="https://img.shields.io/badge/Live_Demo-Try_it_now!-ee9ad5?style=for-the-badge" alt="Live Demo" />
-  </a>
-  <a href="https://bitboyb.github.io/SeminarSmack/api/">
-    <img src="https://img.shields.io/badge/API_Docs-View_Reference-5fd9d7?style=for-the-badge" alt="API Docs" />
-  </a>
-  <a href="./LICENSE">
-    <img src="https://img.shields.io/badge/License-MIT-gray?style=for-the-badge" alt="License MIT" />
-  </a>
-  <p>Create live polls, quizzes, and short text questions — students join with a QR code from any device.<br/>No login required. No install. Free to use.</p>
-  <br />
-  <img src="https://github.com/bitboyb/SeminarSmack/raw/main/docs/assets/img/seminar-smack-preview.gif" width="80%" style="border-radius: 12px; box-shadow: 0 10px 30px rgba(0,0,0,0.2);">
-</div>
-<hr>
-<h2>Quick start</h2>
-<ol>
-<li><strong>Open the site</strong> — visit the <a href="https://bitboyb.github.io/SeminarSmack/">live SeminarSmack app</a>.</li>
-<li><strong>Create a session</strong> — click &quot;Create a session&quot;, add your questions.</li>
-<li><strong>Start hosting</strong> — click &quot;Start session&quot;. A room code and QR code are generated automatically.</li>
-<li><strong>Share with students</strong> — show the QR code on screen or share the join link.</li>
-<li><strong>Present live</strong> — step through activities, see answers update in realtime, reveal correct answers when ready.</li>
-</ol>
-<h2>What it does</h2>
-<ul>
-<li><strong>Live polls</strong> — multiple-choice questions with realtime results</li>
-<li><strong>Quizzes</strong> — mark a correct answer and reveal it when ready</li>
-<li><strong>Short text responses</strong> — collect open-ended answers from students</li>
-<li><strong>QR code join</strong> — students scan and answer from their phones</li>
-<li><strong>Session export/import</strong> — save your session as JSON and reuse it later</li>
-</ul>
-<h2>How it works</h2>
-<ul>
-<li>Sessions created in the browser are stored in your browser's <code>localStorage</code>.</li>
-<li>The presenter page is the <strong>source of truth</strong> — it broadcasts state to all connected students via Supabase Realtime Broadcast.</li>
-<li>The <strong>QR code</strong> on the presenter page is generated locally in the browser using a vendored copy of <a href="https://github.com/kazuhikoarase/qrcode-generator">qrcode-generator</a>. No QR API, CDN, or backend service is used.</li>
-<li>There is <strong>no database</strong> and <strong>no backend server</strong>. Everything runs in the browser.</li>
-<li>Sessions are temporary and local to the browser that created them, unless you export them as JSON.</li>
-</ul>
-<h2>Ethos</h2>
-<p>SeminarSmack is built on the belief that simple educational tools should be accessible to everyone.</p>
-<p>Many classroom interaction tools are useful because they make teaching more engaging: they help students respond, vote, reflect, and take part. But tools like this are often placed behind subscriptions, usage limits, account systems, or institutional licences. In practice, that can leave individual educators paying out of pocket just to make their sessions more interactive.</p>
-<p>SeminarSmack takes a different approach.</p>
-<p>The app is intentionally small, static, and low-cost to run. It does not need a complex backend, paid hosting, a database, or expensive infrastructure. Because the technical costs are minimal, the tool should remain free to use, easy to self-host, and open to adaptation.</p>
-<p>This project is not against paid educational software. Complex platforms need funding, support, maintenance, and long-term sustainability. But when a tool can be delivered simply, cheaply, and openly, it should not create unnecessary barriers for teachers or learners.</p>
-<p>SeminarSmack aims to be:</p>
-<ul>
-<li><strong>Free for educators and students</strong> — no paywall for basic classroom participation.</li>
-<li><strong>Open source</strong> — so the tool can be inspected, adapted, improved, and self-hosted.</li>
-<li><strong>Low infrastructure</strong> — designed to avoid unnecessary hosting costs.</li>
-<li><strong>Privacy-conscious</strong> — no login, no database by default, and no student accounts required.</li>
-<li><strong>Practical</strong> — focused on the classroom features teachers actually need during live sessions.</li>
-<li><strong>Reusable</strong> — sessions can be exported, imported, shared, and adapted.</li>
-</ul>
-<p>The goal is simple: make it easier for educators to create active, engaging lessons without adding another cost, account, or platform dependency.</p>
-<h2>Self-hosting / development</h2>
-<h3>1. Fork the repo</h3>
-<p>Fork this repository to your own GitHub account.</p>
-<h3>2. Create a Supabase project</h3>
-<p>Create a free Supabase project and collect:</p>
-<ul>
-<li>Project URL</li>
-<li>Publishable key (anon key)</li>
-</ul>
-<p>Do <strong>not</strong> use a <code>service_role</code> key.</p>
-<h3>3. Add GitHub repository variables</h3>
-<p>In your fork, add these repository variables (or secrets):</p>
-<ul>
-<li><code>SUPABASE_URL</code></li>
-<li><code>SUPABASE_PUBLISHABLE_KEY</code></li>
-</ul>
-<p>The GitHub Actions workflow generates <code>docs/config.js</code> during deployment.</p>
-<h3>4. Enable GitHub Pages</h3>
-<p>In your fork: Settings → Pages → Source → GitHub Actions.</p>
-<h3>5. Push to main</h3>
-<p>Push to <code>main</code> or trigger the workflow manually. The site deploys from <code>docs/</code>.</p>
-<h3>Local preview</h3>
-<pre class="prettyprint source lang-bash"><code>cp docs/config.template.js docs/config.js
-</code></pre>
-<p>Edit <code>docs/config.js</code> with your Supabase credentials, then serve <code>docs/</code> locally.</p>
-<h2>Repository layout</h2>
-<pre class="prettyprint source lang-text"><code>/docs
-  index.html          — Landing page
-  create.html         — Session builder
-  join.html           — Student join page
-  present.html        — Presenter controls
-  styles.css          — Design system
-  app.js              — Shared utilities + router
-  session-builder.js  — Create page logic
-  presenter.js        — Presenter logic
-  participant.js      — Student join logic
-  landing.js          — Landing page module
-  supabase.js         — Supabase client
-  config.template.js  — Config placeholder
-  vendor/
-    qrcode.min.js       — QR code generator (vendored, no CDN)
-  sessions/
-    sample-session.json
-    example-session.json
-
-/.github/workflows/pages.yml
-README.md
-LICENSE
-</code></pre>
-<h2>URL reference</h2>
-<h3>New flow (recommended)</h3>
-<pre class="prettyprint source"><code>create.html                                    — Build a session
-present.html?room=SPARK-4821&host=&lt;token>      — Host the session
-join.html?room=SPARK-4821                      — Student join
-</code></pre>
-<h3>Legacy flow (still supported)</h3>
-<pre class="prettyprint source"><code>present.html?room=abc&session=sample-session&host=token
-join.html?room=abc&session=sample-session
-</code></pre>
-<h2>Security notes</h2>
-<ul>
-<li>Uses the Supabase <strong>publishable key</strong> only — visible in the browser, which is expected.</li>
-<li>Never use a <code>service_role</code> key.</li>
-<li>The host token is a lightweight browser-side control guard, <strong>not</strong> a full authentication system.</li>
-<li>This is a lightweight teaching tool, not a secure exam platform.</li>
-</ul>
-<h2>License</h2>
-<p>MIT</p></article>
+        <article><h1>SeminarSmack API Documentation</h1>
+<p>Welcome to the technical documentation for SeminarSmack.</p>
+<p>SeminarSmack is a static, zero-backend web application that uses Supabase Realtime Broadcast to synchronize state between a presenter and multiple participants.</p>
+<p>Use the navigation menu on the right to explore the core modules, classes, and shared utilities that power the application.</p></article>
     </section>
 
 
@@ -185,7 +63,7 @@ join.html?room=abc&session=sample-session
 <br class="clear">
 
 <footer>
-    Documentation generated by <a href="https://github.com/jsdoc/jsdoc">JSDoc 4.0.5</a> on Mon May 04 2026 00:39:31 GMT+0100 (British Summer Time)
+    Documentation generated by <a href="https://github.com/jsdoc/jsdoc">JSDoc 4.0.5</a> on Mon May 04 2026 00:44:58 GMT+0100 (British Summer Time)
 </footer>
 
 <script> prettyPrint(); </script>
