@@ -16,7 +16,7 @@
   <p>Create live polls, quizzes, and short text questions — students join with a QR code from any device.<br/>No login required. No install. Free to use.</p>
 
   <br />
-  <video src="https://github.com/bitboyb/SeminarSmack/raw/main/seminar-smack-preview.webm" autoplay loop muted playsinline width="80%" style="border-radius: 12px; box-shadow: 0 10px 30px rgba(0,0,0,0.2);"></video>
+  <video src="https://github.com/bitboyb/SeminarSmack/raw/main/docs/assets/video/seminar-smack-preview.mp4" autoplay loop muted playsinline width="80%" style="border-radius: 12px; box-shadow: 0 10px 30px rgba(0,0,0,0.2);"></video>
 </div>
 
 ---
