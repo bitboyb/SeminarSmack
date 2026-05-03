@@ -1,0 +1,630 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <title>JSDoc: Source: pages/presenter.js</title>
+
+    <script src="scripts/prettify/prettify.js"> </script>
+    <script src="scripts/prettify/lang-css.js"> </script>
+    <!--[if lt IE 9]>
+      <script src="//html5shiv.googlecode.com/svn/trunk/html5.js"></script>
+    <![endif]-->
+    <link type="text/css" rel="stylesheet" href="styles/prettify-tomorrow.css">
+    <link type="text/css" rel="stylesheet" href="styles/jsdoc-default.css">
+</head>
+
+<body>
+
+<div id="main">
+
+    <h1 class="page-title">Source: pages/presenter.js</h1>
+
+    
+
+
+
+    
+    <section>
+        <article>
+            <pre class="prettyprint source linenums"><code>/**
+ * presenter.js — Presenter dashboard logic for SeminarSmack.
+ *
+ * @module presenter
+ */
+
+import {
+  getConfigStatus, openRoomChannel, sendBroadcast, closeRoomChannel,
+  COOLDOWN_MS, PRESENTER_HEARTBEAT_MS, SNAPSHOT_DEBOUNCE_MS, SUBMISSION_LIMITS,
+  loadSessionFromStorage, loadSessionFromFile, saveSessionToStorage,
+  sanitizeSimpleToken, sanitizeHostToken, normalizeSessionName,
+  validateSession, createPresenterState, createPresenterActivityState,
+  getCurrentActivity, getActivityById, getActivityNumber, getResponseTotal,
+  isActivityRevealed, getTextMaxLength, clampIndex, clampNumber,
+  hashString, stableStringify, humanizeType, escapeHtml, escapeAttribute,
+  renderMetricCard, renderEmptyState, setBanner, buildPageUrl,
+  signEvent, verifySignedEvent, verifyEventIfNeeded,
+  copyText, flashButtonState, downloadText, randomToken
+} from "../app.js";
+
+export async function initPresenterPage() {
+  const params = new URLSearchParams(window.location.search);
+  const room = sanitizeSimpleToken(params.get("room"));
+  const sessionParam = normalizeSessionName(params.get("session"));
+  const hostToken = sanitizeHostToken(params.get("host"));
+
+  const runtime = {
+    page: "present", room, sessionParam, hostToken,
+    channel: null, client: null, session: null,
+    sessionHash: "", sessionSource: "not loaded",
+    presenterState: null, authoringDraft: "",
+    bannerMessage: "", bannerTone: "info",
+    connectionLabel: "Not connected", connectionTone: "muted",
+    snapshotTimer: null, heartbeatId: null
+  };
+
+  if (!room) {
+    runtime.bannerMessage = "No room code found. Go back and create a session first.";
+    runtime.bannerTone = "warning";
+  }
+
+  if (!hostToken) {
+    runtime.bannerMessage = "Host token missing — presenter controls will be disabled.";
+    runtime.bannerTone = "warning";
+  }
+
+  // Session loading priority: localStorage → file → error
+  if (room &amp;&amp; !runtime.session) {
+    const stored = loadSessionFromStorage(room);
+    if (stored) {
+      attachSession(runtime, stored, "Browser session");
+    }
+  }
+
+  if (!runtime.session &amp;&amp; sessionParam) {
+    const loaded = await loadSessionFromFile(sessionParam);
+    if (loaded.ok) {
+      attachSession(runtime, loaded.session, loaded.sourceLabel);
+    }
+  }
+
+  if (!runtime.session &amp;&amp; !runtime.bannerMessage) {
+    runtime.bannerMessage = "No session found. Create one first or add ?session=filename to load a JSON file.";
+    runtime.bannerTone = "warning";
+  }
+
+  const configStatus = getConfigStatus();
+  if (!configStatus.ok) {
+    runtime.connectionLabel = "Local preview only";
+    runtime.connectionTone = "warning";
+    if (!runtime.bannerMessage) {
+      runtime.bannerMessage = "Realtime is disabled — config.js is not populated.";
+      runtime.bannerTone = "warning";
+    }
+    renderPresenter(runtime);
+    return;
+  }
+
+  if (!room || !hostToken) { renderPresenter(runtime); return; }
+
+  renderPresenter(runtime);
+
+  try {
+    const { channel, client } = await openRoomChannel(room, {
+      vote_submitted: async (p) => handleSubmission(runtime, "poll", p),
+      quiz_submitted: async (p) => handleSubmission(runtime, "quiz", p),
+      text_submitted: async (p) => handleSubmission(runtime, "text", p),
+      activity_changed: async (p) => {
+        const ok = await verifyEventIfNeeded(runtime, "activity_changed", p);
+        if (!ok || !runtime.session || !runtime.presenterState) return;
+        const rev = Number(p.revision) || 0;
+        if (rev &lt; runtime.presenterState.revision) return;
+        runtime.presenterState.currentActivityIndex = clampIndex(Number(p.currentActivityIndex), runtime.session.activities.length);
+        runtime.presenterState.submissionsLocked = Boolean(p.submissionsLocked);
+        runtime.presenterState.revision = rev;
+        renderPresenter(runtime);
+      },
+      session_reset: async (p) => {
+        const ok = await verifyEventIfNeeded(runtime, "session_reset", p);
+        if (!ok || !runtime.session || !runtime.presenterState) return;
+        const rev = Number(p.revision) || 0;
+        if (rev &lt; runtime.presenterState.revision) return;
+        const activity = getActivityById(runtime.session, p.activityId);
+        if (!activity) return;
+        resetActivity(runtime, activity, { silent: true, nextResetCount: Number(p.resetCount) || undefined, nextRevision: rev || undefined });
+        renderPresenter(runtime);
+      },
+      submissions_locked: async (p) => {
+        const ok = await verifyEventIfNeeded(runtime, "submissions_locked", p);
+        if (!ok || !runtime.presenterState) return;
+        const rev = Number(p.revision) || 0;
+        if (rev &lt; runtime.presenterState.revision) return;
+        runtime.presenterState.submissionsLocked = Boolean(p.locked);
+        runtime.presenterState.revision = rev;
+        renderPresenter(runtime);
+      },
+      reveal_answer: async (p) => {
+        const ok = await verifyEventIfNeeded(runtime, "reveal_answer", p);
+        if (!ok || !runtime.presenterState) return;
+        const rev = Number(p.revision) || 0;
+        if (rev &lt; runtime.presenterState.revision) return;
+        const aid = String(p.activityId || "");
+        if (Boolean(p.revealed)) runtime.presenterState.revealedActivityIds.add(aid);
+        else runtime.presenterState.revealedActivityIds.delete(aid);
+        runtime.presenterState.revision = rev;
+        renderPresenter(runtime);
+      }
+    });
+
+    runtime.channel = channel;
+    runtime.client = client;
+    runtime.connectionLabel = "Connected";
+    runtime.connectionTone = "success";
+    runtime.bannerMessage = "Session is live. Share the student link or QR code when ready.";
+    runtime.bannerTone = "success";
+
+    if (runtime.session &amp;&amp; runtime.presenterState) {
+      await broadcastSnapshot(runtime, "presenter_connected");
+      runtime.heartbeatId = window.setInterval(() => { void broadcastSnapshot(runtime, "heartbeat"); }, PRESENTER_HEARTBEAT_MS);
+    }
+  } catch {
+    runtime.connectionLabel = "Connection failed";
+    runtime.connectionTone = "warning";
+    runtime.bannerMessage = "Could not connect to the realtime channel. Check your Supabase config.";
+    runtime.bannerTone = "warning";
+  }
+
+  renderPresenter(runtime);
+  window.addEventListener("beforeunload", () => {
+    if (runtime.snapshotTimer) window.clearTimeout(runtime.snapshotTimer);
+    if (runtime.heartbeatId) window.clearInterval(runtime.heartbeatId);
+    if (runtime.channel) void closeRoomChannel(runtime.channel);
+  });
+}
+
+function attachSession(runtime, session, sourceLabel) {
+  runtime.session = session;
+  runtime.sessionHash = hashString(stableStringify(session));
+  runtime.sessionSource = sourceLabel;
+  runtime.presenterState = createPresenterState(session);
+  runtime.authoringDraft = JSON.stringify(session, null, 2);
+
+  try {
+    const stickyStr = window.localStorage.getItem(`seminarsmack:sticky:${runtime.room}`);
+    if (stickyStr) {
+      const sticky = JSON.parse(stickyStr);
+      if (sticky.sessionHash === runtime.sessionHash) {
+        runtime.presenterState.currentActivityIndex = clampIndex(Number(sticky.currentActivityIndex), session.activities.length);
+        runtime.presenterState.submissionsLocked = Boolean(sticky.submissionsLocked);
+        runtime.presenterState.revealedActivityIds = new Set(Array.isArray(sticky.revealedActivityIds) ? sticky.revealedActivityIds : []);
+      }
+    }
+  } catch {}
+}
+
+function saveStickyState(runtime) {
+  if (!runtime.room || !runtime.presenterState) return;
+  const sticky = {
+    sessionHash: runtime.sessionHash,
+    currentActivityIndex: runtime.presenterState.currentActivityIndex,
+    submissionsLocked: runtime.presenterState.submissionsLocked,
+    revealedActivityIds: [...runtime.presenterState.revealedActivityIds]
+  };
+  window.localStorage.setItem(`seminarsmack:sticky:${runtime.room}`, JSON.stringify(sticky));
+}
+
+function resetActivity(runtime, activity, opts = {}) {
+  const next = createPresenterActivityState(activity);
+  const cur = runtime.presenterState.activityStates[activity.id];
+  next.resetCount = opts.nextResetCount || cur.resetCount + 1;
+  runtime.presenterState.activityStates[activity.id] = next;
+  runtime.presenterState.revealedActivityIds.delete(activity.id);
+  runtime.presenterState.revision = opts.nextRevision || runtime.presenterState.revision + 1;
+  saveStickyState(runtime);
+  if (!opts.silent) { runtime.bannerMessage = "Activity reset."; runtime.bannerTone = "success"; }
+}
+
+// ── Rendering ──────────────────────────────────────────────────
+
+function renderPresenter(runtime) {
+  const sessionSummary = document.getElementById("session-summary");
+  const controlPanel = document.getElementById("control-panel");
+  const activityStage = document.getElementById("activity-stage");
+  const resultsStage = document.getElementById("results-stage");
+  const authoringPanel = document.getElementById("authoring-panel");
+  const qrPanel = document.getElementById("qr-panel");
+  const pageStatus = document.getElementById("page-status");
+
+  const activeJsonInput = document.activeElement?.id === "session-json-input" ? document.activeElement : null;
+  const jsonSelStart = typeof activeJsonInput?.selectionStart === "number" ? activeJsonInput.selectionStart : null;
+  const jsonSelEnd = typeof activeJsonInput?.selectionEnd === "number" ? activeJsonInput.selectionEnd : null;
+
+  setBanner(pageStatus, runtime.bannerMessage, runtime.bannerTone);
+
+  if (!sessionSummary || !controlPanel || !activityStage || !resultsStage || !authoringPanel) return;
+
+  const activity = getCurrentActivity(runtime.session, runtime.presenterState);
+  const actState = activity ? runtime.presenterState?.activityStates[activity.id] : null;
+  const disabled = !runtime.hostToken || !runtime.session || !runtime.presenterState;
+  const canReveal = Boolean(activity &amp;&amp; activity.type === "quiz");
+  const isRevealed = activity ? isActivityRevealed(runtime.presenterState, activity.id) : false;
+
+  const joinLink = runtime.room ? buildPageUrl("join", { room: runtime.room }) : "";
+
+  // Session summary
+  sessionSummary.innerHTML = runtime.session ? `
+    &lt;div class="session-meta">
+      &lt;div class="summary-row">
+        &lt;div>
+          &lt;p class="section-kicker">Session loaded&lt;/p>
+          &lt;h2 class="session-title">${escapeHtml(runtime.session.title)}&lt;/h2>
+          &lt;p class="body-copy">${escapeHtml(runtime.session.description || "No description.")}&lt;/p>
+        &lt;/div>
+        &lt;div class="stack">
+          &lt;span class="badge ${runtime.presenterState?.submissionsLocked ? 'badge-locked' : 'badge-open'}">${runtime.presenterState?.submissionsLocked ? 'Submissions closed' : 'Submissions open'}&lt;/span>
+        &lt;/div>
+      &lt;/div>
+      &lt;div class="metric-grid">
+        ${renderMetricCard("Room", `&lt;span class="mono">${escapeHtml(runtime.room || "n/a")}&lt;/span>`, "Broadcast channel")}
+        ${renderMetricCard("Activities", String(runtime.session.activities.length), runtime.sessionSource)}
+        ${renderMetricCard("Current", activity ? `${getActivityNumber(runtime.session, activity.id)} / ${runtime.session.activities.length}` : "—", activity ? humanizeType(activity.type) : "None")}
+        ${renderMetricCard("Status", escapeHtml(runtime.connectionLabel), runtime.connectionTone === "success" ? "Live" : "Offline")}
+      &lt;/div>
+    &lt;/div>
+  ` : renderEmptyState("No session loaded", "Create a session first or add ?session=filename to the URL.");
+
+  // QR panel
+  if (qrPanel) {
+    qrPanel.innerHTML = joinLink ? `
+      &lt;div class="qr-panel">
+        &lt;p class="section-kicker">📱 Students join here&lt;/p>
+        &lt;div class="room-code-display">${escapeHtml(runtime.room)}&lt;/div>
+        &lt;div id="qr-container">&lt;/div>
+        &lt;p class="body-copy" style="max-width: 360px; margin: 0 auto; font-size: 0.92rem;">Scan the QR code with your phone camera, or open the link below in any browser.&lt;/p>
+        &lt;div class="stack">
+          &lt;div class="copy-row">
+            &lt;input id="presenter-join-link" type="text" readonly value="${escapeAttribute(joinLink)}" />
+            &lt;button class="button button-ghost" type="button" data-copy-target="presenter-join-link">Copy link&lt;/button>
+          &lt;/div>
+        &lt;/div>
+      &lt;/div>
+    ` : renderEmptyState("No join link", "A room code is needed to generate the QR code.");
+    renderQR(joinLink);
+  }
+
+  // Controls
+  controlPanel.innerHTML = `
+    &lt;div class="controls-shell">
+      &lt;p class="section-kicker">Controls&lt;/p>
+      &lt;div class="control-row">
+        &lt;button id="prev-activity" class="button button-ghost" type="button" ${disabled || !activity || getActivityNumber(runtime.session, activity.id) === 1 ? 'disabled' : ''}>← Previous&lt;/button>
+        &lt;button id="next-activity" class="button button-primary" type="button" ${disabled || !activity || getActivityNumber(runtime.session, activity.id) === runtime.session?.activities.length ? 'disabled' : ''}>Next →&lt;/button>
+        &lt;button id="toggle-lock" class="button button-secondary" type="button" ${disabled || !activity ? 'disabled' : ''}>${runtime.presenterState?.submissionsLocked ? 'Open submissions' : 'Close submissions'}&lt;/button>
+        &lt;button id="reset-activity" class="button button-danger" type="button" ${disabled || !activity ? 'disabled' : ''}>Reset &amp; Allow Resubmission&lt;/button>
+        &lt;button id="toggle-reveal" class="button button-ghost" type="button" ${disabled || !canReveal ? 'disabled' : ''}>${isRevealed ? 'Hide answer' : 'Reveal answer'}&lt;/button>
+      &lt;/div>
+
+    &lt;/div>
+  `;
+
+  // Activity stage
+  activityStage.innerHTML = activity ? `
+    &lt;div class="activity-shell">
+      &lt;div class="title-row">
+        &lt;div>
+          &lt;p class="section-kicker">Current activity&lt;/p>
+          &lt;h2 class="activity-title">${escapeHtml(activity.question)}&lt;/h2>
+        &lt;/div>
+        &lt;span class="badge badge-accent">Activity ${getActivityNumber(runtime.session, activity.id)} of ${runtime.session.activities.length}&lt;/span>
+      &lt;/div>
+      ${renderPresenterPreview(runtime, activity, actState)}
+    &lt;/div>
+  ` : renderEmptyState("No active activity", "Load a session to start.");
+
+  // Results
+  const total = activity ? getResponseTotal(activity, actState) : 0;
+  resultsStage.innerHTML = activity ? `
+    &lt;div class="results-shell">
+      &lt;div class="title-row">
+        &lt;div>
+          &lt;p class="section-kicker">Results&lt;/p>
+          &lt;h2 class="activity-title">${escapeHtml(activity.question)}&lt;/h2>
+        &lt;/div>
+        &lt;span class="badge badge-accent">${total} response${total === 1 ? '' : 's'}&lt;/span>
+      &lt;/div>
+      ${renderResults(runtime, activity, actState)}
+    &lt;/div>
+  ` : renderEmptyState("No results", "Results appear once students submit.");
+
+  // Authoring
+  authoringPanel.innerHTML = `
+    &lt;div class="authoring-shell">
+      &lt;p class="section-kicker">Session JSON&lt;/p>
+      &lt;details>
+        &lt;summary>Import or export session&lt;/summary>
+        &lt;div class="stack-lg">
+          &lt;label class="field">
+            &lt;span>Session JSON&lt;/span>
+            &lt;textarea id="session-json-input" spellcheck="false">${escapeHtml(runtime.authoringDraft || (runtime.session ? JSON.stringify(runtime.session, null, 2) : ""))}&lt;/textarea>
+          &lt;/label>
+          &lt;div class="control-row">
+            &lt;button id="load-session-json" class="button button-secondary" type="button">Load JSON&lt;/button>
+            &lt;button id="copy-session-json" class="button button-ghost" type="button">Copy&lt;/button>
+            &lt;button id="download-session-json" class="button button-ghost" type="button">Download&lt;/button>
+          &lt;/div>
+        &lt;/div>
+      &lt;/details>
+    &lt;/div>
+  `;
+
+  bindInteractions(runtime);
+
+  if (activeJsonInput) {
+    const next = document.getElementById("session-json-input");
+    next?.focus();
+    if (next &amp;&amp; typeof jsonSelStart === "number" &amp;&amp; typeof jsonSelEnd === "number") {
+      next.setSelectionRange(jsonSelStart, jsonSelEnd);
+    }
+  }
+}
+
+function renderQR(url) {
+  const container = document.getElementById("qr-container");
+  if (!container || !url) return;
+
+  try {
+    if (typeof window.qrcode !== "function") throw new Error("QR library not loaded.");
+    const qr = window.qrcode(0, "M");
+    qr.addData(url);
+    qr.make();
+    const img = qr.createImgTag(6, 16);
+    container.innerHTML = img;
+    const imgEl = container.querySelector("img");
+    if (imgEl) {
+      imgEl.alt = "QR code to join this session";
+      imgEl.style.maxWidth = "280px";
+      imgEl.style.width = "100%";
+      imgEl.style.height = "auto";
+      imgEl.style.borderRadius = "var(--radius-md)";
+    }
+  } catch {
+    container.innerHTML = `&lt;div class="notice notice-info" style="text-align:center;">QR code could not be generated. Students can use the link or room code above instead.&lt;/div>`;
+  }
+}
+
+function renderPresenterPreview(runtime, activity, actState) {
+  if (activity.type === "text") {
+    return `
+      &lt;div class="metric-grid">
+        ${renderMetricCard("Responses", String(actState?.texts.length || 0), "Current")}
+        ${renderMetricCard("Limit", String(SUBMISSION_LIMITS.text), "Per student")}
+        ${renderMetricCard("Max chars", String(getTextMaxLength(activity)), "Per response")}
+      &lt;/div>
+    `;
+  }
+
+  const isRevealed = isActivityRevealed(runtime.presenterState, activity.id);
+  return `
+    &lt;div class="choice-grid">
+      ${activity.options.map((opt, i) => {
+        const correct = activity.type === "quiz" &amp;&amp; isRevealed &amp;&amp; activity.correctIndex === i;
+        return `
+          &lt;article class="choice-card ${correct ? 'is-correct' : ''}">
+            &lt;div class="choice-header">
+              &lt;span>${escapeHtml(opt)}&lt;/span>
+              ${correct ? '&lt;span class="badge badge-open">Correct&lt;/span>' : `&lt;span class="badge badge-accent">Option ${i + 1}&lt;/span>`}
+            &lt;/div>
+            &lt;div class="choice-meta">&lt;span>${actState?.counts[i] || 0} votes&lt;/span>&lt;/div>
+          &lt;/article>
+        `;
+      }).join("")}
+    &lt;/div>
+  `;
+}
+
+function renderResults(runtime, activity, actState) {
+  if (!actState) return renderEmptyState("No results", "Waiting for responses.");
+
+  if (activity.type === "text") {
+    const texts = [...actState.texts].reverse();
+    return texts.length ? `&lt;div class="text-entry-list">${texts.map((e, i) => `
+      &lt;article class="text-card">&lt;p>${escapeHtml(e.text)}&lt;/p>&lt;small>Response ${texts.length - i}&lt;/small>&lt;/article>
+    `).join("")}&lt;/div>` : renderEmptyState("No text yet", "Responses appear as students submit.");
+  }
+
+  const revealCorrect = activity.type === "quiz" &amp;&amp; isActivityRevealed(runtime.presenterState, activity.id);
+  const total = getResponseTotal(activity, actState);
+  return `&lt;div class="choice-grid">${activity.options.map((opt, i) => {
+    const count = actState.counts[i] || 0;
+    const pct = total > 0 ? Math.round((count / total) * 100) : 0;
+    const correct = revealCorrect &amp;&amp; activity.correctIndex === i;
+    return `
+      &lt;article class="choice-card ${correct ? 'is-correct' : ''}">
+        &lt;div class="choice-header">&lt;span>${escapeHtml(opt)}&lt;/span>&lt;strong>${count}&lt;/strong>&lt;/div>
+        &lt;div class="meter">&lt;div class="meter-fill" style="width:${pct}%">&lt;/div>&lt;/div>
+        &lt;div class="choice-meta">&lt;span>${pct}%&lt;/span>&lt;span>${count} response${count === 1 ? '' : 's'}&lt;/span>&lt;/div>
+        ${correct ? '&lt;span class="badge badge-open">Correct answer&lt;/span>' : ''}
+      &lt;/article>
+    `;
+  }).join("")}&lt;/div>`;
+}
+
+// ── Interactions ───────────────────────────────────────────────
+
+function bindInteractions(runtime) {
+  document.getElementById("prev-activity")?.addEventListener("click", () => shiftActivity(runtime, -1));
+  document.getElementById("next-activity")?.addEventListener("click", () => shiftActivity(runtime, 1));
+  document.getElementById("toggle-lock")?.addEventListener("click", () => toggleLock(runtime));
+  document.getElementById("reset-activity")?.addEventListener("click", () => resetCurrent(runtime));
+  document.getElementById("toggle-reveal")?.addEventListener("click", () => toggleReveal(runtime));
+
+  const jsonInput = document.getElementById("session-json-input");
+  jsonInput?.addEventListener("input", () => { runtime.authoringDraft = jsonInput.value; });
+
+  document.getElementById("load-session-json")?.addEventListener("click", () => loadFromDraft(runtime));
+  document.getElementById("copy-session-json")?.addEventListener("click", async () => {
+    const val = runtime.authoringDraft || (runtime.session ? JSON.stringify(runtime.session, null, 2) : "");
+    if (val) { try { await copyText(val); setBanner(document.getElementById("page-status"), "JSON copied.", "success"); } catch {} }
+  });
+  document.getElementById("download-session-json")?.addEventListener("click", () => {
+    const val = runtime.authoringDraft || (runtime.session ? JSON.stringify(runtime.session, null, 2) : "");
+    if (val) downloadText("session.json", val);
+  });
+}
+
+async function shiftActivity(runtime, delta) {
+  if (!runtime.session || !runtime.presenterState || !runtime.hostToken) return;
+  const cur = getCurrentActivity(runtime.session, runtime.presenterState);
+  const ci = cur ? getActivityNumber(runtime.session, cur.id) - 1 : 0;
+  const ni = clampIndex(ci + delta, runtime.session.activities.length);
+  if (ni === runtime.presenterState.currentActivityIndex) return;
+  runtime.presenterState.currentActivityIndex = ni;
+  runtime.presenterState.submissionsLocked = false;
+  runtime.presenterState.revision += 1;
+  saveStickyState(runtime);
+  await sendPresenterEvent(runtime, "activity_changed", {
+    activityId: runtime.session.activities[ni].id,
+    currentActivityIndex: ni, submissionsLocked: false,
+    revision: runtime.presenterState.revision
+  });
+  scheduleSnapshot(runtime, "activity_changed");
+  renderPresenter(runtime);
+}
+
+async function toggleLock(runtime) {
+  if (!runtime.presenterState || !runtime.hostToken) return;
+  runtime.presenterState.submissionsLocked = !runtime.presenterState.submissionsLocked;
+  runtime.presenterState.revision += 1;
+  saveStickyState(runtime);
+  await sendPresenterEvent(runtime, "submissions_locked", { locked: runtime.presenterState.submissionsLocked, revision: runtime.presenterState.revision });
+  scheduleSnapshot(runtime, "lock_toggled");
+  renderPresenter(runtime);
+}
+
+async function resetCurrent(runtime) {
+  if (!runtime.session || !runtime.presenterState || !runtime.hostToken) return;
+  const activity = getCurrentActivity(runtime.session, runtime.presenterState);
+  if (!activity) return;
+  resetActivity(runtime, activity);
+  await sendPresenterEvent(runtime, "session_reset", { activityId: activity.id, resetCount: runtime.presenterState.activityStates[activity.id].resetCount, revision: runtime.presenterState.revision });
+  scheduleSnapshot(runtime, "activity_reset");
+  renderPresenter(runtime);
+}
+
+async function toggleReveal(runtime) {
+  if (!runtime.session || !runtime.presenterState || !runtime.hostToken) return;
+  const activity = getCurrentActivity(runtime.session, runtime.presenterState);
+  if (!activity || activity.type !== "quiz") return;
+  const revealed = !runtime.presenterState.revealedActivityIds.has(activity.id);
+  if (revealed) runtime.presenterState.revealedActivityIds.add(activity.id);
+  else runtime.presenterState.revealedActivityIds.delete(activity.id);
+  runtime.presenterState.revision += 1;
+  saveStickyState(runtime);
+  await sendPresenterEvent(runtime, "reveal_answer", { activityId: activity.id, revealed, revision: runtime.presenterState.revision });
+  scheduleSnapshot(runtime, "reveal_toggled");
+  renderPresenter(runtime);
+}
+
+async function loadFromDraft(runtime) {
+  const draft = runtime.authoringDraft || document.getElementById("session-json-input")?.value || "";
+  if (!draft.trim()) { runtime.bannerMessage = "Paste valid JSON first."; runtime.bannerTone = "warning"; renderPresenter(runtime); return; }
+  let raw;
+  try { raw = JSON.parse(draft); } catch { runtime.bannerMessage = "Invalid JSON."; runtime.bannerTone = "warning"; renderPresenter(runtime); return; }
+  const v = validateSession(raw);
+  if (!v.ok) { runtime.bannerMessage = v.errors.join(" "); runtime.bannerTone = "warning"; renderPresenter(runtime); return; }
+  attachSession(runtime, v.session, "Imported JSON");
+  runtime.bannerMessage = "Session loaded from JSON."; runtime.bannerTone = "success";
+  renderPresenter(runtime);
+  if (runtime.hostToken) await broadcastSnapshot(runtime, "session_imported");
+}
+
+// ── Submission handling ────────────────────────────────────────
+
+async function handleSubmission(runtime, expectedType, payload) {
+  if (!runtime.session || !runtime.presenterState) return;
+  const activity = getCurrentActivity(runtime.session, runtime.presenterState);
+  if (!activity || activity.type !== expectedType) return;
+  if (payload.activityId !== activity.id || runtime.presenterState.submissionsLocked) return;
+
+  const deviceId = sanitizeSimpleToken(payload.deviceId);
+  if (!deviceId) return;
+
+  const actState = runtime.presenterState.activityStates[activity.id];
+  const entry = actState.submissionsByDevice[deviceId] || { count: 0, lastSubmittedAt: 0, choiceIndex: null, resetCount: actState.resetCount };
+  if (Date.now() - entry.lastSubmittedAt &lt; COOLDOWN_MS) return;
+
+  if (expectedType === "text") {
+    const text = String(payload.text || "").trim();
+    if (!text || text.length > getTextMaxLength(activity) || entry.count >= SUBMISSION_LIMITS.text) return;
+    actState.texts.push({ id: `${deviceId}-${Date.now()}`, text, submittedAt: new Date().toISOString() });
+  } else {
+    const oi = Number(payload.optionIndex);
+    if (!Number.isInteger(oi) || oi &lt; 0 || oi >= activity.options.length || entry.count >= SUBMISSION_LIMITS[expectedType]) return;
+    actState.counts[oi] = (actState.counts[oi] || 0) + 1;
+    entry.choiceIndex = oi;
+  }
+
+  entry.count += 1;
+  entry.lastSubmittedAt = Date.now();
+  entry.resetCount = actState.resetCount;
+  actState.submissionsByDevice[deviceId] = entry;
+  runtime.presenterState.revision += 1;
+  renderPresenter(runtime);
+  scheduleSnapshot(runtime, "submission");
+}
+
+// ── Broadcasting ───────────────────────────────────────────────
+
+async function sendPresenterEvent(runtime, name, payload) {
+  if (!runtime.channel || !runtime.hostToken) return;
+  const signed = await signEvent(name, payload, runtime.hostToken);
+  await sendBroadcast(runtime.channel, name, signed);
+}
+
+async function broadcastSnapshot(runtime, reason) {
+  if (!runtime.channel || !runtime.session || !runtime.presenterState || !runtime.hostToken) return;
+  const snap = buildSnapshot(runtime, reason);
+  const signed = await signEvent("state_snapshot", snap, runtime.hostToken);
+  await sendBroadcast(runtime.channel, "state_snapshot", signed);
+}
+
+function scheduleSnapshot(runtime, reason) {
+  if (runtime.snapshotTimer) window.clearTimeout(runtime.snapshotTimer);
+  runtime.snapshotTimer = window.setTimeout(() => { runtime.snapshotTimer = null; void broadcastSnapshot(runtime, reason); }, SNAPSHOT_DEBOUNCE_MS);
+}
+
+function buildSnapshot(runtime, reason) {
+  const states = Object.fromEntries(
+    Object.entries(runtime.presenterState.activityStates).map(([id, s]) => [id, { counts: [...s.counts], texts: s.texts.map((e) => ({ id: e.id, text: e.text, submittedAt: e.submittedAt })), resetCount: s.resetCount }])
+  );
+  return {
+    reason, revision: runtime.presenterState.revision, session: runtime.session,
+    sessionHash: runtime.sessionHash || hashString(stableStringify(runtime.session)),
+    currentActivityIndex: runtime.presenterState.currentActivityIndex,
+    submissionsLocked: runtime.presenterState.submissionsLocked,
+    revealedActivityIds: [...runtime.presenterState.revealedActivityIds],
+    activityStates: states, sentAt: new Date().toISOString()
+  };
+}
+</code></pre>
+        </article>
+    </section>
+
+
+
+
+</div>
+
+<nav>
+    <h2><a href="index.html">Home</a></h2><h3>Modules</h3><ul><li><a href="module-app.html">app</a></li><li><a href="module-landing.html">landing</a></li><li><a href="module-participant.html">participant</a></li><li><a href="module-presenter.html">presenter</a></li><li><a href="module-sessionBuilder.html">sessionBuilder</a></li><li><a href="module-supabase.html">supabase</a></li></ul>
+</nav>
+
+<br class="clear">
+
+<footer>
+    Documentation generated by <a href="https://github.com/jsdoc/jsdoc">JSDoc 4.0.5</a> on Mon May 04 2026 00:19:26 GMT+0100 (British Summer Time)
+</footer>
+
+<script> prettyPrint(); </script>
+<script src="scripts/linenumber.js"> </script>
+</body>
+</html>

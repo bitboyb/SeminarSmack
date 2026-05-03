@@ -1,0 +1,28 @@
+{
+  "name": "seminarsmack",
+  "version": "1.0.0",
+  "description": "<div align=\"center\">   <img src=\"docs/logo.png\" alt=\"SeminarSmack Logo\" width=\"120\" style=\"border-radius: 20%; margin-bottom: 20px;\" />   <h1>SeminarSmack</h1>   <p><strong>A free, open-source classroom interaction tool.</strong></p>",
+  "main": "index.js",
+  "directories": {
+    "doc": "docs"
+  },
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "docs": "jsdoc -c jsdoc.json"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/bitboyb/SeminarSmack.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/bitboyb/SeminarSmack/issues"
+  },
+  "homepage": "https://github.com/bitboyb/SeminarSmack#readme",
+  "devDependencies": {
+    "jsdoc": "^4.0.5"
+  }
+}

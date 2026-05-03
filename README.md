@@ -1,16 +1,29 @@
-# SeminarSmack
+<div align="center">
+  <img src="docs/logo.png" alt="SeminarSmack Logo" width="120" style="border-radius: 20%; margin-bottom: 20px;" />
+  <h1>SeminarSmack</h1>
+  <p><strong>A free, open-source classroom interaction tool.</strong></p>
+  
+  <a href="https://bitboyb.github.io/SeminarSmack/">
+    <img src="https://img.shields.io/badge/Live_Demo-Try_it_now!-ee9ad5?style=for-the-badge" alt="Live Demo" />
+  </a>
+  <img src="https://img.shields.io/badge/Architecture-Zero_Backend-5fd9d7?style=for-the-badge" alt="Zero Backend" />
+  <img src="https://img.shields.io/badge/License-MIT-gray?style=for-the-badge" alt="License MIT" />
 
-A free, open-source classroom interaction tool. Create live polls, quizzes, and short text questions — students join with a QR code from any device.
+  <p>Create live polls, quizzes, and short text questions — students join with a QR code from any device.<br/>No login required. No install. Free to use.</p>
 
-## Quick start (public use)
+  <br />
+  <video src="seminar-smack-preview.webm" autoplay loop muted playsinline width="80%" style="border-radius: 12px; box-shadow: 0 10px 30px rgba(0,0,0,0.2);"></video>
+</div>
 
-1. **Open the site** — visit the deployed SeminarSmack page.
+---
+
+## Quick start
+
+1. **Open the site** — visit the [live SeminarSmack app](https://bitboyb.github.io/SeminarSmack/).
 2. **Create a session** — click "Create a session", add your questions.
 3. **Start hosting** — click "Start session". A room code and QR code are generated automatically.
 4. **Share with students** — show the QR code on screen or share the join link.
 5. **Present live** — step through activities, see answers update in realtime, reveal correct answers when ready.
-
-No login required. No install. Free to use.
 
 ## What it does
 
@@ -27,6 +40,29 @@ No login required. No install. Free to use.
 - The **QR code** on the presenter page is generated locally in the browser using a vendored copy of [qrcode-generator](https://github.com/kazuhikoarase/qrcode-generator). No QR API, CDN, or backend service is used.
 - There is **no database** and **no backend server**. Everything runs in the browser.
 - Sessions are temporary and local to the browser that created them, unless you export them as JSON.
+
+## Ethos
+
+SeminarSmack is built on the belief that simple educational tools should be accessible to everyone.
+
+Many classroom interaction tools are useful because they make teaching more engaging: they help students respond, vote, reflect, and take part. But tools like this are often placed behind subscriptions, usage limits, account systems, or institutional licences. In practice, that can leave individual educators paying out of pocket just to make their sessions more interactive.
+
+SeminarSmack takes a different approach.
+
+The app is intentionally small, static, and low-cost to run. It does not need a complex backend, paid hosting, a database, or expensive infrastructure. Because the technical costs are minimal, the tool should remain free to use, easy to self-host, and open to adaptation.
+
+This project is not against paid educational software. Complex platforms need funding, support, maintenance, and long-term sustainability. But when a tool can be delivered simply, cheaply, and openly, it should not create unnecessary barriers for teachers or learners.
+
+SeminarSmack aims to be:
+
+* **Free for educators and students** — no paywall for basic classroom participation.
+* **Open source** — so the tool can be inspected, adapted, improved, and self-hosted.
+* **Low infrastructure** — designed to avoid unnecessary hosting costs.
+* **Privacy-conscious** — no login, no database by default, and no student accounts required.
+* **Practical** — focused on the classroom features teachers actually need during live sessions.
+* **Reusable** — sessions can be exported, imported, shared, and adapted.
+
+The goal is simple: make it easier for educators to create active, engaging lessons without adding another cost, account, or platform dependency.
 
 ## Self-hosting / development
 

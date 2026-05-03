@@ -1,0 +1,478 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <title>JSDoc: Source: pages/session-builder.js</title>
+
+    <script src="scripts/prettify/prettify.js"> </script>
+    <script src="scripts/prettify/lang-css.js"> </script>
+    <!--[if lt IE 9]>
+      <script src="//html5shiv.googlecode.com/svn/trunk/html5.js"></script>
+    <![endif]-->
+    <link type="text/css" rel="stylesheet" href="styles/prettify-tomorrow.css">
+    <link type="text/css" rel="stylesheet" href="styles/jsdoc-default.css">
+</head>
+
+<body>
+
+<div id="main">
+
+    <h1 class="page-title">Source: pages/session-builder.js</h1>
+
+    
+
+
+
+    
+    <section>
+        <article>
+            <pre class="prettyprint source linenums"><code>/**
+ * session-builder.js — Browser-based session creation for SeminarSmack.
+ *
+ * Teachers fill in a title, add activities (poll / quiz / text), and
+ * click "Start session". The session is saved to localStorage and the
+ * browser redirects to the presenter page.
+ *
+ * @module sessionBuilder
+ */
+
+import {
+  generateRoomCode,
+  randomToken,
+  saveSessionToStorage,
+  escapeHtml,
+  escapeAttribute,
+  setBanner,
+  buildPageUrl,
+  downloadText,
+  sanitizeActivityId,
+  validateSession,
+  copyText,
+  flashButtonState
+} from "../app.js";
+
+let state = {
+  title: "",
+  description: "",
+  activities: [],
+  roomCode: "",
+  hostToken: ""
+};
+
+let nextActivityId = 1;
+let saveDraftTimer = null;
+
+function saveDraft() {
+  if (saveDraftTimer) window.clearTimeout(saveDraftTimer);
+  saveDraftTimer = window.setTimeout(() => {
+    window.localStorage.setItem("seminarsmack:draft-session", JSON.stringify(state));
+  }, 500);
+}
+
+export function initCreatePage() {
+  const draftStr = window.localStorage.getItem("seminarsmack:draft-session");
+  if (draftStr) {
+    try {
+      const draft = JSON.parse(draftStr);
+      if (draft &amp;&amp; typeof draft === "object" &amp;&amp; draft.roomCode) {
+        state = draft;
+      }
+    } catch {}
+  }
+
+  if (!state.roomCode) {
+    state.roomCode = generateRoomCode();
+    state.hostToken = randomToken(18);
+  }
+  render();
+}
+
+function render() {
+  const root = document.getElementById("builder-root");
+  if (!root) return;
+
+  root.innerHTML = `
+    &lt;div class="stack-lg">
+
+      &lt;!-- Session info -->
+      &lt;div class="field">
+        &lt;span>Session title&lt;/span>
+        &lt;input id="builder-title" type="text" placeholder="e.g. Week 3 Lecture Check-in" value="${escapeAttribute(state.title)}" />
+      &lt;/div>
+      &lt;div class="field">
+        &lt;span>Description (optional)&lt;/span>
+        &lt;input id="builder-desc" type="text" placeholder="e.g. Quick check on last week's reading" value="${escapeAttribute(state.description)}" />
+      &lt;/div>
+
+      &lt;!-- Room code display -->
+      &lt;div style="text-align: center; padding: var(--space-md) 0;">
+        &lt;p class="muted" style="margin: 0 0 var(--space-xs); font-size: 0.85rem;">Your room code&lt;/p>
+        &lt;div class="room-code-display">${escapeHtml(state.roomCode)}&lt;/div>
+      &lt;/div>
+
+      &lt;div class="divider">&lt;/div>
+
+      &lt;!-- Activities list -->
+      &lt;div>
+        &lt;p class="section-kicker">Activities (${state.activities.length})&lt;/p>
+        &lt;div id="activities-list" class="stack-lg">
+          ${state.activities.length === 0
+            ? `&lt;div class="empty-state">&lt;p class="body-copy">No activities yet. Add a poll, quiz, or text question below.&lt;/p>&lt;/div>`
+            : state.activities.map((a, i) => renderActivityCard(a, i)).join("")
+          }
+        &lt;/div>
+      &lt;/div>
+
+      &lt;div class="divider">&lt;/div>
+
+      &lt;!-- Add activity -->
+      &lt;div>
+        &lt;p class="section-kicker">Add an activity&lt;/p>
+        &lt;div class="builder-add-type">
+          &lt;button class="type-option" type="button" data-add-type="poll">
+            &lt;div class="type-icon">📊&lt;/div>
+            &lt;div class="type-option-info">
+              &lt;strong>Poll&lt;/strong>
+              &lt;span>Multiple choice, no correct answer&lt;/span>
+            &lt;/div>
+          &lt;/button>
+          &lt;button class="type-option" type="button" data-add-type="quiz">
+            &lt;div class="type-icon">🧠&lt;/div>
+            &lt;div class="type-option-info">
+              &lt;strong>Quiz&lt;/strong>
+              &lt;span>Multiple choice with a correct answer&lt;/span>
+            &lt;/div>
+          &lt;/button>
+          &lt;button class="type-option" type="button" data-add-type="text">
+            &lt;div class="type-icon">💬&lt;/div>
+            &lt;div class="type-option-info">
+              &lt;strong>Short text&lt;/strong>
+              &lt;span>Open-ended short response&lt;/span>
+            &lt;/div>
+          &lt;/button>
+        &lt;/div>
+      &lt;/div>
+
+      &lt;div class="divider">&lt;/div>
+
+      &lt;!-- Actions -->
+      &lt;div class="hero-actions" style="gap: var(--space-sm);">
+        &lt;button id="start-session" class="button button-primary button-lg" type="button">
+          Start session
+        &lt;/button>
+        &lt;button id="export-json" class="button button-ghost" type="button">
+          Export as JSON
+        &lt;/button>
+        &lt;label class="button button-ghost" style="cursor: pointer;">
+          Import JSON
+          &lt;input id="import-json" type="file" accept=".json,application/json" class="visually-hidden" />
+        &lt;/label>
+      &lt;/div>
+
+    &lt;/div>
+  `;
+
+  bindEvents();
+}
+
+function renderActivityCard(activity, index) {
+  const typeLabel = activity.type === "quiz" ? "Quiz" : activity.type === "text" ? "Short text" : "Poll";
+  const total = state.activities.length;
+
+  let optionsHtml = "";
+  if (activity.type === "poll" || activity.type === "quiz") {
+    optionsHtml = `
+      &lt;div class="stack">
+        ${(activity.options || []).map((opt, oi) => `
+          &lt;div class="builder-option-row">
+            &lt;input type="text" value="${escapeAttribute(opt)}" data-activity="${index}" data-option="${oi}" placeholder="Option ${oi + 1}" />
+            ${activity.type === "quiz"
+              ? `&lt;button type="button" class="button ${activity.correctIndex === oi ? 'button-secondary' : 'button-ghost'}" style="min-height:2.5rem; padding:0.5rem 0.7rem; font-size:0.8rem;" data-set-correct="${index}" data-correct-index="${oi}">${activity.correctIndex === oi ? '✓ Correct' : 'Set correct'}&lt;/button>`
+              : ''
+            }
+            &lt;button type="button" class="button button-danger" style="min-height:2.5rem; padding:0.5rem 0.7rem; font-size:0.8rem;" data-remove-option="${index}" data-option-index="${oi}">✕&lt;/button>
+          &lt;/div>
+        `).join("")}
+        &lt;button type="button" class="button button-ghost" style="justify-self: start;" data-add-option="${index}">+ Add option&lt;/button>
+      &lt;/div>
+    `;
+  }
+
+  let textSettingsHtml = "";
+  if (activity.type === "text") {
+    textSettingsHtml = `
+      &lt;div class="field">
+        &lt;span>Max characters&lt;/span>
+        &lt;input type="number" min="1" max="280" value="${activity.maxLength || 180}" data-activity-maxlen="${index}" />
+      &lt;/div>
+    `;
+  }
+
+  return `
+    &lt;div class="builder-activity-card">
+      &lt;div class="builder-activity-header">
+        &lt;h3>&lt;span class="badge badge-accent">${typeLabel}&lt;/span> Activity ${index + 1}&lt;/h3>
+        &lt;div class="builder-activity-actions">
+          &lt;button type="button" class="button button-ghost" style="min-height:2.2rem; padding:0.4rem 0.6rem; font-size:0.85rem;" data-move-up="${index}" ${index === 0 ? 'disabled' : ''}>↑&lt;/button>
+          &lt;button type="button" class="button button-ghost" style="min-height:2.2rem; padding:0.4rem 0.6rem; font-size:0.85rem;" data-move-down="${index}" ${index === total - 1 ? 'disabled' : ''}>↓&lt;/button>
+          &lt;button type="button" class="button button-danger" style="min-height:2.2rem; padding:0.4rem 0.6rem; font-size:0.85rem;" data-remove-activity="${index}">Remove&lt;/button>
+        &lt;/div>
+      &lt;/div>
+      &lt;div class="field">
+        &lt;span>Question&lt;/span>
+        &lt;input type="text" value="${escapeAttribute(activity.question)}" data-activity-question="${index}" placeholder="Enter your question" />
+      &lt;/div>
+      ${optionsHtml}
+      ${textSettingsHtml}
+    &lt;/div>
+  `;
+}
+
+function bindEvents() {
+  // Title &amp; description
+  document.getElementById("builder-title")?.addEventListener("input", (e) => {
+    state.title = e.target.value;
+    saveDraft();
+  });
+  document.getElementById("builder-desc")?.addEventListener("input", (e) => {
+    state.description = e.target.value;
+    saveDraft();
+  });
+
+  // Add activity type
+  document.querySelectorAll("[data-add-type]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const type = btn.dataset.addType;
+      addActivity(type);
+    });
+  });
+
+  // Activity question inputs
+  document.querySelectorAll("[data-activity-question]").forEach((input) => {
+    input.addEventListener("input", () => {
+      const idx = Number(input.dataset.activityQuestion);
+      state.activities[idx].question = input.value;
+      saveDraft();
+    });
+  });
+
+  // Option text inputs
+  document.querySelectorAll("[data-activity][data-option]").forEach((input) => {
+    input.addEventListener("input", () => {
+      const ai = Number(input.dataset.activity);
+      const oi = Number(input.dataset.option);
+      state.activities[ai].options[oi] = input.value;
+      saveDraft();
+    });
+  });
+
+  // Add option
+  document.querySelectorAll("[data-add-option]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const idx = Number(btn.dataset.addOption);
+      state.activities[idx].options.push("");
+      saveDraft();
+      render();
+    });
+  });
+
+  // Remove option
+  document.querySelectorAll("[data-remove-option]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const ai = Number(btn.dataset.removeOption);
+      const oi = Number(btn.dataset.optionIndex);
+      state.activities[ai].options.splice(oi, 1);
+      // Fix correctIndex if needed
+      if (state.activities[ai].type === "quiz") {
+        if (state.activities[ai].correctIndex === oi) {
+          state.activities[ai].correctIndex = null;
+        } else if (state.activities[ai].correctIndex > oi) {
+          state.activities[ai].correctIndex--;
+        }
+      }
+      saveDraft();
+      render();
+    });
+  });
+
+  // Set correct answer
+  document.querySelectorAll("[data-set-correct]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const ai = Number(btn.dataset.setCorrect);
+      const ci = Number(btn.dataset.correctIndex);
+      state.activities[ai].correctIndex = ci;
+      saveDraft();
+      render();
+    });
+  });
+
+  // Move up/down
+  document.querySelectorAll("[data-move-up]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const idx = Number(btn.dataset.moveUp);
+      if (idx > 0) {
+        const temp = state.activities[idx];
+        state.activities[idx] = state.activities[idx - 1];
+        state.activities[idx - 1] = temp;
+        saveDraft();
+        render();
+      }
+    });
+  });
+
+  document.querySelectorAll("[data-move-down]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const idx = Number(btn.dataset.moveDown);
+      if (idx &lt; state.activities.length - 1) {
+        const temp = state.activities[idx];
+        state.activities[idx] = state.activities[idx + 1];
+        state.activities[idx + 1] = temp;
+        saveDraft();
+        render();
+      }
+    });
+  });
+
+  // Remove activity
+  document.querySelectorAll("[data-remove-activity]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const idx = Number(btn.dataset.removeActivity);
+      state.activities.splice(idx, 1);
+      saveDraft();
+      render();
+    });
+  });
+
+  // Max length for text activities
+  document.querySelectorAll("[data-activity-maxlen]").forEach((input) => {
+    input.addEventListener("input", () => {
+      const idx = Number(input.dataset.activityMaxlen);
+      state.activities[idx].maxLength = Number(input.value) || 180;
+      saveDraft();
+    });
+  });
+
+  // Start session
+  document.getElementById("start-session")?.addEventListener("click", () => {
+    startSession();
+  });
+
+  // Export JSON
+  document.getElementById("export-json")?.addEventListener("click", () => {
+    const session = buildSessionObject();
+    if (!session) return;
+    downloadText("session.json", JSON.stringify(session, null, 2));
+  });
+
+  // Import JSON
+  document.getElementById("import-json")?.addEventListener("change", async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    try {
+      const text = await file.text();
+      const parsed = JSON.parse(text);
+      const validation = validateSession(parsed);
+      if (!validation.ok) {
+        setBanner(document.getElementById("page-status"), validation.errors.join(" "), "warning");
+        return;
+      }
+      state.title = validation.session.title;
+      state.description = validation.session.description || "";
+      state.activities = validation.session.activities.map((a) => ({
+        ...a,
+        options: a.options ? [...a.options] : undefined
+      }));
+      setBanner(document.getElementById("page-status"), "Session imported successfully.", "success");
+      saveDraft();
+      render();
+    } catch {
+      setBanner(document.getElementById("page-status"), "Could not read the JSON file.", "warning");
+    }
+  });
+}
+
+function addActivity(type) {
+  const id = sanitizeActivityId(`${type}-${nextActivityId}`, nextActivityId);
+  nextActivityId++;
+
+  const activity = { id, type, question: "" };
+
+  if (type === "poll" || type === "quiz") {
+    activity.options = ["", ""];
+    if (type === "quiz") activity.correctIndex = null;
+  }
+
+  if (type === "text") {
+    activity.maxLength = 180;
+  }
+
+  state.activities.push(activity);
+  saveDraft();
+  render();
+}
+
+function buildSessionObject() {
+  return {
+    title: state.title.trim(),
+    description: state.description.trim(),
+    activities: state.activities.map((a, i) => {
+      const out = {
+        id: sanitizeActivityId(a.id || `activity-${i + 1}`, i),
+        type: a.type,
+        question: a.question.trim()
+      };
+      if (a.type === "poll" || a.type === "quiz") {
+        out.options = (a.options || []).map((o) => o.trim()).filter(Boolean);
+      }
+      if (a.type === "quiz") {
+        out.correctIndex = Number.isInteger(a.correctIndex) ? a.correctIndex : null;
+      }
+      if (a.type === "text") {
+        out.maxLength = a.maxLength || 180;
+      }
+      return out;
+    })
+  };
+}
+
+function startSession() {
+  const session = buildSessionObject();
+  const validation = validateSession(session);
+
+  if (!validation.ok) {
+    setBanner(document.getElementById("page-status"), validation.errors.join(" "), "warning");
+    return;
+  }
+
+  saveSessionToStorage(state.roomCode, validation.session);
+  window.localStorage.removeItem("seminarsmack:draft-session");
+
+  const url = buildPageUrl("present", {
+    room: state.roomCode,
+    host: state.hostToken
+  });
+  window.location.href = url;
+}
+</code></pre>
+        </article>
+    </section>
+
+
+
+
+</div>
+
+<nav>
+    <h2><a href="index.html">Home</a></h2><h3>Modules</h3><ul><li><a href="module-app.html">app</a></li><li><a href="module-landing.html">landing</a></li><li><a href="module-participant.html">participant</a></li><li><a href="module-presenter.html">presenter</a></li><li><a href="module-sessionBuilder.html">sessionBuilder</a></li><li><a href="module-supabase.html">supabase</a></li></ul>
+</nav>
+
+<br class="clear">
+
+<footer>
+    Documentation generated by <a href="https://github.com/jsdoc/jsdoc">JSDoc 4.0.5</a> on Mon May 04 2026 00:19:26 GMT+0100 (British Summer Time)
+</footer>
+
+<script> prettyPrint(); </script>
+<script src="scripts/linenumber.js"> </script>
+</body>
+</html>
