@@ -36,10 +36,10 @@ jobs:
           test -n "$SUPABASE_URL"
           test -n "$SUPABASE_PUBLISHABLE_KEY"
 
-      - name: Generate docs/js/config.js
+      - name: Generate public/js/config.js
         run: |
-          mkdir -p docs/js
-          cat > docs/js/config.js <<EOF
+          mkdir -p public/js
+          cat > public/js/config.js <<EOF
           window.APP_CONFIG = {
             SUPABASE_URL: "${SUPABASE_URL}",
             SUPABASE_PUBLISHABLE_KEY: "${SUPABASE_PUBLISHABLE_KEY}"
@@ -60,7 +60,7 @@ jobs:
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3
         with:
-          path: docs
+          path: public
 
       - name: Deploy to GitHub Pages
         id: deployment

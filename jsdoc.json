@@ -1,13 +1,13 @@
 {
   "source": {
-    "include": ["docs/js"],
-    "exclude": ["docs/js/vendor"],
+    "include": ["public/js"],
+    "exclude": ["public/js/vendor"],
     "includePattern": ".+\\.js(doc|x)?$",
     "excludePattern": "(^|\\/|\\\\)_"
   },
   "opts": {
-    "destination": "./docs/api",
+    "destination": "./public/api",
     "recurse": true,
-    "readme": "docs/API.md"
+    "readme": "public/API.md"
   }
 }

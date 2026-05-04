@@ -1,5 +1,5 @@
 <div align="center">
-  <img src="https://github.com/bitboyb/SeminarSmack/blob/main/docs/assets/img/logo.png?raw=true" alt="SeminarSmack Logo" width="120" style="border-radius: 20%; margin-bottom: 20px;" />
+  <img src="https://github.com/bitboyb/SeminarSmack/blob/main/public/assets/img/logo.png?raw=true" alt="SeminarSmack Logo" width="120" style="border-radius: 20%; margin-bottom: 20px;" />
   <h1>SeminarSmack</h1>
   <p><strong>A free, open-source classroom interaction tool.</strong></p>
   
@@ -16,7 +16,7 @@
   <p>Create live polls, quizzes, and short text questions — students join with a QR code from any device.<br/>No login required. No install. Free to use.</p>
 
   <br />
-  <img src="https://github.com/bitboyb/SeminarSmack/raw/main/docs/assets/img/seminar-smack-preview.gif" width="80%" style="border-radius: 12px; box-shadow: 0 10px 30px rgba(0,0,0,0.2);">
+  <img src="https://github.com/bitboyb/SeminarSmack/raw/main/public/assets/img/seminar-smack-preview.gif" width="80%" style="border-radius: 12px; box-shadow: 0 10px 30px rgba(0,0,0,0.2);">
 </div>
 
 ---
