@@ -85,19 +85,19 @@ document.addEventListener("DOMContentLoaded", () => {
   const page = document.body.dataset.page;
 
   if (page === "index") {
-    import("./landing.js").then((m) => m.initLandingPage());
+    import("./pages/landing.js").then((m) => m.initLandingPage());
     return;
   }
   if (page === "create") {
-    import("./session-builder.js").then((m) => m.initCreatePage());
+    import("./pages/session-builder.js").then((m) => m.initCreatePage());
     return;
   }
   if (page === "present") {
-    import("./presenter.js").then((m) => m.initPresenterPage());
+    import("./pages/presenter.js").then((m) => m.initPresenterPage());
     return;
   }
   if (page === "join") {
-    import("./participant.js").then((m) => m.initJoinPage());
+    import("./pages/participant.js").then((m) => m.initJoinPage());
   }
 });
 
