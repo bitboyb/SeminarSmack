@@ -90,7 +90,7 @@ In your fork, add these repository variables (or secrets):
 - `SUPABASE_URL`
 - `SUPABASE_PUBLISHABLE_KEY`
 
-The GitHub Actions workflow generates `docs/config.js` during deployment.
+The GitHub Actions workflow generates `public/js/config.js` during deployment.
 
 ### 4. Enable GitHub Pages
 
@@ -98,34 +98,39 @@ In your fork: Settings → Pages → Source → GitHub Actions.
 
 ### 5. Push to main
 
-Push to `main` or trigger the workflow manually. The site deploys from `docs/`.
+Push to `main` or trigger the workflow manually. The site deploys from `public/`.
 
 ### Local preview
 
 ```bash
-cp docs/config.template.js docs/config.js
+cp public/js/config.template.js public/js/config.js
 ```
 
-Edit `docs/config.js` with your Supabase credentials, then serve `docs/` locally.
+Edit `public/js/config.js` with your Supabase credentials, then serve `public/` locally.
 
 ## Repository layout
 
 ```text
-/docs
-  index.html          — Landing page
-  create.html         — Session builder
-  join.html           — Student join page
-  present.html        — Presenter controls
-  styles.css          — Design system
-  app.js              — Shared utilities + router
-  session-builder.js  — Create page logic
-  presenter.js        — Presenter logic
-  participant.js      — Student join logic
-  landing.js          — Landing page module
-  supabase.js         — Supabase client
-  config.template.js  — Config placeholder
-  vendor/
-    qrcode.min.js       — QR code generator (vendored, no CDN)
+/public
+  index.html            — Landing page
+  create.html           — Session builder
+  join.html             — Student join page
+  present.html          — Presenter controls
+  API.md                — API documentation homepage
+  assets/
+    css/styles.css      — Design system
+    img/logo.png        — Logo
+  js/
+    app.js              — Shared utilities + router
+    supabase.js         — Supabase client
+    config.template.js  — Config placeholder
+    pages/
+      landing.js        — Landing page module
+      session-builder.js— Create page logic
+      presenter.js      — Presenter logic
+      participant.js    — Student join logic
+    vendor/
+      qrcode.min.js     — QR code generator (vendored, no CDN)
   sessions/
     sample-session.json
     example-session.json
